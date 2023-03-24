@@ -109,6 +109,10 @@ class ShadowHandTest(parameterized.TestCase):
             robot.actuators,
             consts.NU - len(shadow_hand._REDUCED_ACTION_SPACE_EXCLUDED_DOFS),
         )
+        self.assertLen(
+            robot.joints,
+            consts.NQ - len(shadow_hand._REDUCED_ACTION_SPACE_EXCLUDED_DOFS),
+        )
 
     def test_restrict_wrist_yaw_range(self) -> None:
         robot = shadow_hand.ShadowHand(restrict_wrist_yaw_range=True, add_dofs=False)

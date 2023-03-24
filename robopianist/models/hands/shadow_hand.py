@@ -162,11 +162,14 @@ class ShadowHand(base.Hand):
         joints = mjcf_utils.safe_find_all(self._mjcf_root, "joint")
         actuators = mjcf_utils.safe_find_all(self._mjcf_root, "actuator")
         if self._reduce_action_space:
-            # Disable some actuators (keeping the joints).
+            # Disable some actuators.
             for act_name in _REDUCED_ACTION_SPACE_EXCLUDED_DOFS:
                 act = [a for a in actuators if a.name == self._prefix + act_name][0]
                 actuators.remove(act)
                 act.remove()
+                jnt = [j for j in joints if j.name == self._prefix + act_name[2:]][0]
+                joints.remove(jnt)
+                jnt.remove()
             # Reduce THJ2 range.
             joint = mjcf_utils.safe_find(
                 self._mjcf_root, "joint", self._prefix + "THJ2"
@@ -176,9 +179,6 @@ class ShadowHand(base.Hand):
                 self._mjcf_root, "actuator", self._prefix + "A_THJ2"
             )
             actuator.ctrlrange = _REDUCED_THUMB_RANGE
-            # Store indices of joints associated with disabled actuators.
-            names = [self._prefix + n[2:] for n in _REDUCED_ACTION_SPACE_EXCLUDED_DOFS]
-            self._disabled_idxs = [i for i, j in enumerate(joints) if j.name in names]
         self._joints = tuple(joints)
         self._actuators = tuple(actuators)
 
@@ -344,20 +344,6 @@ class ShadowHand(base.Hand):
     ) -> None:
         del random_state  # Unused.
         physics.bind(self.actuators).ctrl = action
-
-    def initialize_episode(
-        self, physics: mjcf.Physics, random_state: np.random.RandomState
-    ) -> None:
-        del random_state  # Unused.
-        if self._reduce_action_space:
-            physics.bind([self.joints[i] for i in self._disabled_idxs]).qpos = 0.0
-
-    def after_step(
-        self, physics: mjcf.Physics, random_state: np.random.RandomState
-    ) -> None:
-        del random_state  # Unused.
-        if self._reduce_action_space:
-            physics.bind([self.joints[i] for i in self._disabled_idxs]).qpos = 0.0
 
 
 class ShadowHandObservables(base.HandObservables):
