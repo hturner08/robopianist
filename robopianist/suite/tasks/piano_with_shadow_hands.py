@@ -317,6 +317,10 @@ class PianoWithShadowHands(base.PianoTask):
         )
         return float(np.mean(rews))
 
+    def _compute_key_velocity_reward(self, physics: mjcf.Physics) -> float:
+        """Reward for pressing the keys with the right velocity."""
+        pass
+
     def _update_goal_state(self) -> None:
         # Observable callables get called after `after_step` but before
         # `should_terminate_episode`. Since we increment `self._t_idx` in `after_step`,
@@ -373,6 +377,8 @@ class PianoWithShadowHands(base.PianoTask):
         # This returns the current state of the piano keys.
         self.piano.observables.state.enabled = True
         self.piano.observables.sustain_state.enabled = True
+        self.piano.observables.vel_state.enabled=True 
+        self.piano.observables.joints_vel.enabled=True
 
         # This returns the goal state for the current timestep and n steps ahead.
         def _get_goal_state(physics) -> np.ndarray:

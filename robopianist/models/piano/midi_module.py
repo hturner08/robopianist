@@ -22,7 +22,9 @@ from dm_control import mjcf
 from robopianist.models.piano import piano_constants
 from robopianist.music import midi_file, midi_message
 
-
+MAX_KEY_VELOCITY = 3  # [rad/s] For ff 
+MIN_KEY_VELOCITY = 1 # [rad/s] For pp
+RANGE = MAX_KEY_VELOCITY - MIN_KEY_VELOCITY # [m/s]
 class MidiModule:
     """The piano sound module.
 
@@ -49,20 +51,20 @@ class MidiModule:
         physics: mjcf.Physics,
         activation: np.ndarray,
         sustain_activation: np.ndarray,
+        velocity_arr: np.ndarray = np.zeros(piano_constants.NUM_KEYS),
     ) -> None:
         timestep_events: List[midi_message.MidiMessage] = []
         message: midi_message.MidiMessage
 
         state_change = activation ^ self._prev_activation
         sustain_change = sustain_activation ^ self._prev_sustain_activation
-
         # Note on events.
         for key_id in np.flatnonzero(state_change & ~self._prev_activation):
+            velocity = (velocity_arr[key_id] - MIN_KEY_VELOCITY)/RANGE 
+            velocity = np.clip(int(velocity*127), 1, 127)
             message = midi_message.NoteOn(
                 note=midi_file.key_number_to_midi_number(key_id),
-                # TODO(kevin): In the future, we will replace this with the actual
-                # key velocity. For now, we hardcode it to the maximum velocity.
-                velocity=127,
+                velocity= velocity,
                 time=physics.data.time,
             )
             timestep_events.append(message)

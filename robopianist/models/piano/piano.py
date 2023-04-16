@@ -30,7 +30,7 @@ _ACTIVATION_COLOR = (0.2, 0.8, 0.2, 1.0)
 # Thresholds for determining whether a key is activated.
 _KEY_THRESHOLD = 0.00872665  # 0.5 degrees.
 _SUSTAIN_THRESHOLD = 0.5
-
+_VEL_LIMIT = 5 # m/s TODO(hturner08): Ask Ruben about this
 
 class Piano(composer.Entity):
     """A full-size standard (88-key) digital piano."""
@@ -40,6 +40,7 @@ class Piano(composer.Entity):
         name: str = "piano",
         add_actuators: bool = False,
         change_color_on_activation: bool = True,
+        velocity_actuated: bool = True,
     ) -> None:
         """Initializes the piano.
 
@@ -51,9 +52,12 @@ class Piano(composer.Entity):
                 considered activated.
             change_color_on_activation: If True, the color of the key changes when it
                 becomes activated.
+            velocity_actuated: If True, the piano is velocity actuated. This is used by 
+                the velocity-acuated piano task.
         """
         self._change_color_on_activation = change_color_on_activation
         self._add_actuators = add_actuators
+        self._velocity_actuated = velocity_actuated
         self._midi_module = midi_module.MidiModule()
 
         self._mjcf_root = piano_mjcf.build(add_actuators=add_actuators)
@@ -65,6 +69,7 @@ class Piano(composer.Entity):
 
         _physics = mjcf.Physics.from_mjcf_model(self._mjcf_root)
         self._qpos_range = _physics.bind(self.joints).range
+        self._qvel_range = _VEL_LIMIT
         if add_actuators:
             self._ctrl_midpoint = np.mean(
                 _physics.bind(self.actuators).ctrlrange, axis=1
@@ -158,17 +163,19 @@ class Piano(composer.Entity):
         self._update_key_state(physics)
         self._update_key_color(physics)
         self._midi_module.after_substep(
-            physics, self._activation, self._sustain_activation
+            physics, self._activation, self._sustain_activation, self._vel_state
         )
 
     # Methods.
 
     def _initialize_state(self) -> None:
         self._state = np.zeros(piano_consts.NUM_KEYS, dtype=np.float64)
+        self._vel_state = np.zeros(piano_consts.NUM_KEYS, dtype=np.float64)
         self._sustain_state = np.zeros(1, dtype=np.float64)
         self._activation = np.zeros(piano_consts.NUM_KEYS, dtype=bool)
         self._sustain_activation = np.zeros(1, dtype=bool)
         self._normalized_state = np.zeros(piano_consts.NUM_KEYS, dtype=np.float64)
+        self._normalized_vel_state = np.zeros(piano_consts.NUM_KEYS, dtype=np.float64)
 
     def is_key_black(self, key_id: int) -> bool:
         """Returns True if the piano key id corresponds to a black key."""
@@ -184,6 +191,9 @@ class Piano(composer.Entity):
             # MuJoCo joint limits are soft, so we clip any joint positions that are
             # outside their limits.
             joints_pos = physics.bind(self.joints).qpos
+            if self._velocity_actuated:
+                self._vel_state = physics.bind(self.joints).qvel
+                # self._vel_state[:] = np.clip(joints_vel, *self._qvel_range.T)
             self._state[:] = np.clip(joints_pos, *self._qpos_range.T)
             self._normalized_state[:] = self._state / self._qpos_range[:, 1]
             self._activation[:] = np.where(
@@ -254,6 +264,10 @@ class Piano(composer.Entity):
     @property
     def state(self) -> np.ndarray:
         return self._state
+    
+    @property
+    def vel_state(self) -> np.ndarray:
+        return self._vel_state
 
     @property
     def normalized_state(self) -> np.ndarray:
@@ -297,6 +311,15 @@ class PianoObservables(composer.Observables):
 
         return observable.Generic(raw_observation_callable=_get_joints_pos)
 
+    @composer.observable 
+    def joints_vel(self):
+        """Returns the piano key joint velocities."""
+
+        def _get_joints_vel(physics: mjcf.Physics) -> np.ndarray:
+            return physics.bind(self._entity.joints).qvel
+        
+        return observable.Generic(raw_observation_callable=_get_joints_vel)
+
     @composer.observable
     def activation(self):
         """Returns the piano key activations."""
@@ -326,6 +349,17 @@ class PianoObservables(composer.Observables):
             return self._entity.normalized_state
 
         return observable.Generic(raw_observation_callable=_get_normalized_state)
+    
+    @composer.observable
+    def vel_state(self):
+        """Returns the piano key states."""
+
+        def _get_state(physics: mjcf.Physics) -> np.ndarray:
+            del physics 
+            return self._entity.vel_state
+
+        return observable.Generic(raw_observation_callable=_get_state)
+
 
     @composer.observable
     def sustain_state(self):
