@@ -43,7 +43,7 @@ class PianoSoundVideoWrapper(DmControlVideoWrapper):
             raise ValueError("PianoVideoWrapper only works with piano environments.")
 
         super().__init__(environment, **kwargs)
-
+        self.unwrapped = environment
         self._midi_module: midi_module.MidiModule = environment.task.piano.midi_module
         self._sample_rate = sample_rate
         self._synth = synthesizer.Synthesizer(sf2_path, sample_rate)
