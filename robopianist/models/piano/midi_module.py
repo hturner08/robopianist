@@ -33,7 +33,8 @@ class MidiModule:
     to produce sound.
     """
 
-    def __init__(self) -> None:
+    def __init__(self, calculate_velocity=False) -> None:
+        self.calculate_velocity = calculate_velocity
         self._note_on_callback: Optional[Callable[[int, int], None]] = None
         self._note_off_callback: Optional[Callable[[int], None]] = None
         self._sustain_on_callback: Optional[Callable[[], None]] = None
@@ -59,9 +60,11 @@ class MidiModule:
         state_change = activation ^ self._prev_activation
         sustain_change = sustain_activation ^ self._prev_sustain_activation
         # Note on events.
+        velocity = 64
         for key_id in np.flatnonzero(state_change & ~self._prev_activation):
-            velocity = (velocity_arr[key_id] - MIN_KEY_VELOCITY)/RANGE 
-            velocity = np.clip(int(velocity*127), 1, 127)
+            if self.calculate_velocity:
+                velocity = (velocity_arr[key_id] - MIN_KEY_VELOCITY)/RANGE 
+                velocity = np.clip(int(velocity*127), 1, 127)
             message = midi_message.NoteOn(
                 note=midi_file.key_number_to_midi_number(key_id),
                 velocity= velocity,
